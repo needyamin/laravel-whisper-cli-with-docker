@@ -87,6 +87,13 @@ ffmpeg -i input.mp3 -ar 16000 output.wav
 
 ---
 
+
+## Docker Bash!
+`docker exec -it laravel_whisper bash`
+
+## Run the artisan storage link command
+`php artisan storage:link`
+
 ## 📄 License
 
 MIT License
@@ -94,4 +101,5 @@ MIT License
 ---
 
 PRs and contributions welcome!
+
 
