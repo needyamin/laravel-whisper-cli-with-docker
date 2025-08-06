@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Storage;
 
 class SpeechController extends Controller
 {
@@ -29,6 +31,34 @@ class SpeechController extends Controller
 
         $text = file_get_contents($transcriptPath);
 
-        return response()->json(['transcript' => trim($text)]);
+        return response()->json([
+            'transcript' => trim($text),
+            'filename' => "$filename.txt"
+        ]);
+    }
+
+    public function textToSpeech(Request $request)
+    {
+        $request->validate([
+            'text' => 'required|string'
+        ]);
+
+        $text = $request->input('text');
+        $filename = Str::uuid()->toString();
+        $outputPath = storage_path("app/public/{$filename}.mp3");
+
+        // Run Python gTTS command
+        $escapedText = escapeshellarg($text);
+        $escapedPath = escapeshellarg($outputPath);
+        $cmd = "python3 " . base_path("scripts/tts.py") . " $escapedText $escapedPath";
+        exec($cmd, $output, $returnCode);
+
+        if ($returnCode !== 0 || !file_exists($outputPath)) {
+            return response()->json(['error' => 'TTS failed.'], 500);
+        }
+
+        return response()->json([
+            'audio_url' => asset("storage/{$filename}.mp3")
+        ]);
     }
 }

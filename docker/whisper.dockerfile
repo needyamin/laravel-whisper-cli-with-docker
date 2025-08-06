@@ -1,8 +1,6 @@
-# docker/whisper.dockerfile
-
 FROM php:8.2-cli
 
-# Install dependencies
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     git \
     unzip \
@@ -17,17 +15,22 @@ RUN apt-get update && apt-get install -y \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Create virtualenv for whisper
+# Create and activate Python virtual environment
 RUN python3 -m venv /opt/venv
 
-# Upgrade pip and install whisper
+# Install Whisper and gTTS inside venv
 RUN /opt/venv/bin/pip install --upgrade pip && \
-    /opt/venv/bin/pip install git+https://github.com/openai/whisper.git
+    /opt/venv/bin/pip install \
+        git+https://github.com/openai/whisper.git \
+        gTTS
 
-# Install Composer
+# Make venv available system-wide (optional, so you can just use 'python' or 'pip')
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Install Composer (for Laravel)
 COPY --from=composer:2.5 /usr/bin/composer /usr/bin/composer
 
-# Set working directory
+# Set the working directory inside the container
 WORKDIR /var/www
 
-# Add Laravel and app source via docker-compose bind mount
+# The actual app will be mounted from host via docker-compose
