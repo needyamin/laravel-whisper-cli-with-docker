@@ -1,4 +1,4 @@
-# 🧠 Laravel Whisper - Offline Speech to Text API (Docker + Whisper CLI)
+# Offline Speech to Text API (Docker + Whisper CLI)
 
 This project provides an offline, open-source speech-to-text (STT) API using Laravel, Python, OpenAI's Whisper, and Docker.
 
@@ -6,11 +6,11 @@ This project provides an offline, open-source speech-to-text (STT) API using Lar
 
 ## ✅ This setup includes:
 
-- ✅ Laravel app (PHP 8.2)
-- ✅ Python + Whisper CLI installed
-- ✅ FFmpeg for audio handling
-- ✅ API to upload and transcribe audio using Whisper
-- ✅ Docker volume mount for sharing files across app
+- Laravel app (PHP 8.2)
+- Python + Whisper CLI installed
+- FFmpeg for audio handling
+- API to upload and transcribe audio using Whisper
+- Docker volume mount for sharing files across app
 
 ---
 
@@ -93,11 +93,5 @@ MIT License
 
 ---
 
-## 📬 Want More?
-
-Let us know if you want:
-- GPU-enabled Whisper Dockerfile
-- Blade frontend uploader
-- Text-to-speech integration
-
 PRs and contributions welcome!
+
