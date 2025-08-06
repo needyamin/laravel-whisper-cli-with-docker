@@ -101,3 +101,13 @@ Let us know if you want:
 - Text-to-speech integration
 
 PRs and contributions welcome!
+
+
+
+docker exec -it laravel_whisper_app_1 bash
+
+    Replace laravel_whisper_app_1 with your container name if it's different (you can check with docker ps).
+
+Run the artisan storage link command:
+
+php artisan storage:link
