@@ -11,7 +11,7 @@ services:
       - "8000:8000"
     volumes:
       - ./app:/var/www              # Laravel app with routes, controllers, views
-      - ./app/scripts:/var/www/app/scripts  # Mount scripts directory (contains tts.py)
+      - ./app/scripts:/var/www/scripts  # Mount scripts directory (contains tts.py)
     working_dir: /var/www
     environment:
       - APP_ENV=local
