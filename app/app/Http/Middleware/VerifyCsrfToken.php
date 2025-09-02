@@ -8,5 +8,6 @@ class VerifyCsrfToken extends BaseVerifier
 {
     protected $except = [
         'speech-to-texts',
+        'api/*',
     ];
 }
