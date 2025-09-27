@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Microphone Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; }
+        .test-section { margin: 20px 0; padding: 20px; border: 1px solid #ddd; border-radius: 8px; }
+        button { padding: 10px 20px; margin: 5px; border: none; border-radius: 4px; cursor: pointer; }
+        .success { background-color: #d4edda; color: #155724; }
+        .error { background-color: #f8d7da; color: #721c24; }
+        .info { background-color: #d1ecf1; color: #0c5460; }
+        #log { background-color: #f8f9fa; padding: 15px; border-radius: 4px; height: 300px; overflow-y: auto; font-family: monospace; }
+    </style>
+</head>
+<body>
+    <h1>🎤 Microphone System Audit</h1>
+    
+    <div class="test-section">
+        <h3>1. Browser Support Check</h3>
+        <div id="browser-support"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>2. Microphone Permission Test</h3>
+        <button onclick="testBasicPermission()">Test Basic Permission</button>
+        <button onclick="testDeviceList()">List Devices</button>
+        <div id="permission-result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>3. Recording Test</h3>
+        <button onclick="startRecordingTest()">Start Recording</button>
+        <button onclick="stopRecordingTest()">Stop Recording</button>
+        <div id="recording-result"></div>
+        <audio id="audio-player" controls style="width: 100%; margin-top: 10px;"></audio>
+    </div>
+    
+    <div class="test-section">
+        <h3>4. Debug Log</h3>
+        <button onclick="clearLog()">Clear Log</button>
+        <div id="log"></div>
+    </div>
+
+    <script>
+        let currentStream = null;
+        let mediaRecorder = null;
+        let audioChunks = [];
+        
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            const className = type === 'error' ? 'error' : type === 'success' ? 'success' : 'info';
+            logDiv.innerHTML += `<div class="${className}">[${timestamp}] ${message}</div>`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+            console.log(`[${timestamp}] ${message}`);
+        }
+        
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+        
+        // 1. Browser Support Check
+        function checkBrowserSupport() {
+            const support = {
+                'getUserMedia': !!navigator.mediaDevices?.getUserMedia,
+                'MediaRecorder': typeof MediaRecorder !== 'undefined',
+                'AudioContext': typeof AudioContext !== 'undefined' || typeof webkitAudioContext !== 'undefined',
+                'HTTPS': location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1'
+            };
+            
+            let html = '<ul>';
+            for (const [feature, supported] of Object.entries(support)) {
+                const status = supported ? '✅' : '❌';
+                const className = supported ? 'success' : 'error';
+                html += `<li class="${className}">${status} ${feature}</li>`;
+                log(`${feature}: ${supported ? 'Supported' : 'Not Supported'}`, supported ? 'success' : 'error');
+            }
+            html += '</ul>';
+            
+            document.getElementById('browser-support').innerHTML = html;
+        }
+        
+        // 2. Basic Permission Test
+        async function testBasicPermission() {
+            log('Testing basic microphone permission...');
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                log('✅ Basic permission granted', 'success');
+                
+                const audioTracks = stream.getAudioTracks();
+                log(`Audio tracks found: ${audioTracks.length}`, 'info');
+                
+                if (audioTracks.length > 0) {
+                    const track = audioTracks[0];
+                    log(`Track readyState: ${track.readyState}`, 'info');
+                    log(`Track label: ${track.label}`, 'info');
+                    log(`Track enabled: ${track.enabled}`, 'info');
+                }
+                
+                document.getElementById('permission-result').innerHTML = '<div class="success">✅ Permission granted successfully</div>';
+                
+                // Stop the test stream
+                stream.getTracks().forEach(track => track.stop());
+                
+            } catch (err) {
+                log(`❌ Permission failed: ${err.name} - ${err.message}`, 'error');
+                document.getElementById('permission-result').innerHTML = `<div class="error">❌ Permission failed: ${err.message}</div>`;
+            }
+        }
+        
+        // 3. Device List Test
+        async function testDeviceList() {
+            log('Getting device list...');
+            try {
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const audioInputs = devices.filter(device => device.kind === 'audioinput');
+                
+                log(`Found ${audioInputs.length} audio input devices:`, 'info');
+                audioInputs.forEach((device, index) => {
+                    log(`  ${index + 1}. ${device.label || 'Unknown Device'} (${device.deviceId})`, 'info');
+                });
+                
+                document.getElementById('permission-result').innerHTML = `<div class="info">Found ${audioInputs.length} audio input devices</div>`;
+                
+            } catch (err) {
+                log(`❌ Device enumeration failed: ${err.message}`, 'error');
+                document.getElementById('permission-result').innerHTML = `<div class="error">❌ Device enumeration failed: ${err.message}</div>`;
+            }
+        }
+        
+        // 4. Recording Test
+        async function startRecordingTest() {
+            log('Starting recording test...');
+            try {
+                // Get microphone access
+                currentStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                log('✅ Microphone access granted', 'success');
+                
+                // Check MediaRecorder support
+                const mimeTypes = ['audio/webm', 'audio/mp4', 'audio/wav'];
+                let mimeType = null;
+                
+                for (const type of mimeTypes) {
+                    if (MediaRecorder.isTypeSupported(type)) {
+                        mimeType = type;
+                        break;
+                    }
+                }
+                
+                log(`Using MIME type: ${mimeType || 'default'}`, 'info');
+                
+                // Create MediaRecorder
+                const options = mimeType ? { mimeType } : {};
+                mediaRecorder = new MediaRecorder(currentStream, options);
+                
+                audioChunks = [];
+                
+                mediaRecorder.ondataavailable = (event) => {
+                    if (event.data.size > 0) {
+                        audioChunks.push(event.data);
+                        log(`Audio chunk received: ${event.data.size} bytes`, 'info');
+                    }
+                };
+                
+                mediaRecorder.onstart = () => {
+                    log('✅ Recording started', 'success');
+                    document.getElementById('recording-result').innerHTML = '<div class="success">🔴 Recording...</div>';
+                };
+                
+                mediaRecorder.onstop = () => {
+                    log('✅ Recording stopped', 'success');
+                    const audioBlob = new Blob(audioChunks, { type: mimeType || 'audio/webm' });
+                    log(`Audio blob created: ${audioBlob.size} bytes`, 'info');
+                    
+                    const audioUrl = URL.createObjectURL(audioBlob);
+                    document.getElementById('audio-player').src = audioUrl;
+                    document.getElementById('recording-result').innerHTML = '<div class="success">✅ Recording completed</div>';
+                };
+                
+                mediaRecorder.onerror = (event) => {
+                    log(`❌ Recording error: ${event.error}`, 'error');
+                    document.getElementById('recording-result').innerHTML = `<div class="error">❌ Recording error: ${event.error}</div>`;
+                };
+                
+                // Start recording
+                mediaRecorder.start(1000); // Record in 1-second chunks
+                
+            } catch (err) {
+                log(`❌ Recording test failed: ${err.name} - ${err.message}`, 'error');
+                document.getElementById('recording-result').innerHTML = `<div class="error">❌ Recording failed: ${err.message}</div>`;
+            }
+        }
+        
+        function stopRecordingTest() {
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                log('Stopping recording...');
+                mediaRecorder.stop();
+            } else {
+                log('No active recording to stop', 'error');
+            }
+        }
+        
+        // Initialize on page load
+        window.addEventListener('load', () => {
+            log('Microphone Test Page Loaded', 'info');
+            checkBrowserSupport();
+        });
+        
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', () => {
+            if (currentStream) {
+                currentStream.getTracks().forEach(track => track.stop());
+            }
+        });
+    </script>
+</body>
+</html>

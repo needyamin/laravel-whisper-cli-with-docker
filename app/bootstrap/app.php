@@ -14,6 +14,12 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->prepend(App\Http\Middleware\VerifyCsrfToken::class);
         $middleware->prepend(StartSession::class);
+        
+        // Register custom middleware aliases
+        $middleware->alias([
+            'check.payment' => \App\Http\Middleware\CheckPaymentAccess::class,
+            'admin' => \App\Http\Middleware\CheckAdminAccess::class,
+        ]);
     })
 
     ->withExceptions(function (Exceptions $exceptions): void {

@@ -47,7 +47,7 @@ class SpeechController extends Controller
     }
 
     /**
-     * Convert text to speech (MP3) using Python TTS script.
+     * Convert text to speech (MP3) using Worker AI.
      */
     public function textToSpeech(Request $request)
     {
@@ -63,23 +63,32 @@ class SpeechController extends Controller
             mkdir(public_path("mp3"), 0777, true);
         }
 
-        $escapedText = escapeshellarg($text);
-        $escapedPath = escapeshellarg($outputPath);
-        $python = "python";
+        try {
+            // Send text to your worker AI for TTS
+            $response = Http::post('https://whisper.md-yamin-hossain.workers.dev/tts', [
+                'text' => $text,
+                'output_format' => 'mp3'
+            ]);
 
-        $cmd = "$python " . base_path("scripts/tts.py") . " $escapedText $escapedPath 2>&1";
-
-        exec($cmd, $output, $returnCode);
-
-        if ($returnCode !== 0 || !file_exists($outputPath)) {
+            if ($response->ok()) {
+                // Save the audio response to file
+                file_put_contents($outputPath, $response->body());
+                
+                return response()->json([
+                    'audio_url' => asset("mp3/{$filename}.mp3")
+                ]);
+            } else {
+                return response()->json([
+                    'error' => 'TTS worker returned error',
+                    'status' => $response->status(),
+                    'body' => $response->body()
+                ], $response->status());
+            }
+        } catch (\Exception $e) {
             return response()->json([
-                'error' => 'TTS failed',
-                'details' => implode("\n", $output)
+                'error' => 'TTS request failed',
+                'message' => $e->getMessage()
             ], 500);
         }
-
-        return response()->json([
-            'audio_url' => asset("mp3/{$filename}.mp3")
-        ]);
     }
 }

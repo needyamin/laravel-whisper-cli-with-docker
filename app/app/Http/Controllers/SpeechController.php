@@ -56,29 +56,39 @@ class SpeechController extends Controller
 
         $text = $request->input('text');
         $filename = Str::uuid()->toString();
-        $outputPath = public_path("mp3/{$filename}.mp3"); // public/mp3 folder
-        if (!file_exists(public_path("mp3")))
+        $outputPath = public_path("mp3/{$filename}.mp3");
+        
+        if (!file_exists(public_path("mp3"))) {
             mkdir(public_path("mp3"), 0777, true);
+        }
 
-        $escapedText = escapeshellarg($text);
-        $escapedPath = escapeshellarg($outputPath);
-        $python = "python";
+        try {
+            // Send text to your worker AI for TTS
+            $response = Http::post('https://whisper.md-yamin-hossain.workers.dev/tts', [
+                'text' => $text,
+                'output_format' => 'mp3'
+            ]);
 
-        // Redirect stderr to stdout to capture errors
-        $cmd = "$python " . base_path("scripts/tts.py") . " $escapedText $escapedPath 2>&1";
-
-        exec($cmd, $output, $returnCode);
-
-        if ($returnCode !== 0 || !file_exists($outputPath)) {
+            if ($response->ok()) {
+                // Save the audio response to file
+                file_put_contents($outputPath, $response->body());
+                
+                return response()->json([
+                    'audio_url' => asset("mp3/{$filename}.mp3")
+                ]);
+            } else {
+                return response()->json([
+                    'error' => 'TTS worker returned error',
+                    'status' => $response->status(),
+                    'body' => $response->body()
+                ], $response->status());
+            }
+        } catch (\Exception $e) {
             return response()->json([
-                'error' => 'TTS failed',
-                'details' => implode("\n", $output) // show Python errors
+                'error' => 'TTS request failed',
+                'message' => $e->getMessage()
             ], 500);
         }
-        return response()->json([
-            'audio_url' => asset("mp3/{$filename}.mp3")
-        ]);
-
     }
 
 
