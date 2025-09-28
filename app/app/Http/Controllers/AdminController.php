@@ -111,31 +111,49 @@ class AdminController extends Controller
      */
     public function grantWaiver(Request $request, User $user)
     {
-        $request->validate([
-            'reason' => 'required|string|max:500',
-            'expires_at' => 'nullable|date|after:now',
-            'discount_percentage' => 'nullable|numeric|min:0|max:100'
-        ]);
+        try {
+            $request->validate([
+                'reason' => 'required|string|max:500',
+                'expires_at' => 'nullable|date|after:today',
+                'discount_percentage' => 'nullable|numeric|min:0|max:100'
+            ]);
 
-        $user->update([
-            'has_payment_waiver' => true,
-            'waiver_reason' => $request->reason,
-            'waiver_expires_at' => $request->expires_at,
-            'custom_discount_percentage' => $request->discount_percentage ?? 100,
-        ]);
+            $user->update([
+                'has_payment_waiver' => true,
+                'waiver_reason' => $request->reason,
+                'waiver_expires_at' => $request->expires_at,
+                'custom_discount_percentage' => $request->discount_percentage ?? 100,
+            ]);
 
-        Log::info('Payment waiver granted', [
-            'user_id' => $user->id,
-            'reason' => $request->reason,
-            'expires_at' => $request->expires_at,
-            'discount_percentage' => $request->discount_percentage,
-            'granted_by' => Auth::id()
-        ]);
+            Log::info('Payment waiver granted', [
+                'user_id' => $user->id,
+                'reason' => $request->reason,
+                'expires_at' => $request->expires_at,
+                'discount_percentage' => $request->discount_percentage,
+                'granted_by' => Auth::id()
+            ]);
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Payment waiver granted successfully.'
-        ]);
+            return response()->json([
+                'success' => true,
+                'message' => 'Payment waiver granted successfully.'
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed: ' . implode(', ', collect($e->errors())->flatten()->toArray())
+            ], 422);
+        } catch (\Exception $e) {
+            Log::error('Error granting waiver', [
+                'user_id' => $user->id,
+                'error' => $e->getMessage(),
+                'granted_by' => Auth::id()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Error granting waiver: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
     /**

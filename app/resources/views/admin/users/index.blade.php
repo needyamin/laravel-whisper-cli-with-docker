@@ -245,8 +245,17 @@
     <script>
         let currentUserId = null;
 
+        // Reusable function to get base URL for admin requests
+        function getAdminBaseUrl() {
+            return window.location.origin + window.location.pathname.replace('/admin/users', '');
+        }
+
         function updateUserRole(userId, newRole) {
-            fetch(`/admin/users/${userId}/role`, {
+            const baseUrl = getAdminBaseUrl();
+            console.log('Updating role for user:', userId, 'to:', newRole);
+            console.log('Full URL:', `${baseUrl}/admin/users/${userId}/role`);
+            
+            fetch(`${baseUrl}/admin/users/${userId}/role`, {
                 method: 'PATCH',
                 headers: {
                     'Content-Type': 'application/json',
@@ -254,7 +263,12 @@
                 },
                 body: JSON.stringify({ role: newRole })
             })
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                return response.json();
+            })
             .then(data => {
                 if (data.success) {
                     showAlert('User role updated successfully!', 'success');
@@ -265,35 +279,47 @@
             })
             .catch(error => {
                 console.error('Error:', error);
-                showAlert('Error updating role', 'error');
+                showAlert('Error updating role: ' + error.message, 'error');
             });
         }
 
         function resetFreeTests(userId) {
             if (confirm('Are you sure you want to reset this user\'s free tests?')) {
-                fetch(`/admin/users/${userId}/reset-free-tests`, {
+                const baseUrl = getAdminBaseUrl();
+                console.log('Resetting free tests for user:', userId);
+                console.log('Full URL:', `${baseUrl}/admin/users/${userId}/reset-free-tests`);
+                
+                fetch(`${baseUrl}/admin/users/${userId}/reset-free-tests`, {
                     method: 'POST',
                     headers: {
                         'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
                     }
                 })
-                .then(response => response.json())
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+                    return response.json();
+                })
                 .then(data => {
                     if (data.success) {
-                        location.reload();
+                        showAlert('Free tests reset successfully!', 'success');
+                        setTimeout(() => location.reload(), 1500);
                     } else {
-                        alert(data.message || 'Error resetting free tests');
+                        showAlert(data.message || 'Error resetting free tests', 'error');
                     }
                 })
                 .catch(error => {
                     console.error('Error:', error);
-                    alert('Error resetting free tests');
+                    showAlert('Error resetting free tests: ' + error.message, 'error');
                 });
             }
         }
 
         function openWaiverModal(userId, userName) {
+            console.log('Opening waiver modal for user:', userId, userName);
             currentUserId = userId;
+            console.log('Current user ID set to:', currentUserId);
             document.getElementById('waiverUserName').value = userName;
             document.getElementById('waiverModal').classList.add('show');
             document.body.classList.add('modal-open');
@@ -346,7 +372,12 @@
                 discount_percentage: parseFloat(formData.get('discount_percentage'))
             };
 
-            fetch(`/admin/users/${currentUserId}/waiver`, {
+            const baseUrl = getAdminBaseUrl();
+            console.log('Base URL:', baseUrl);
+            console.log('Current User ID:', currentUserId);
+            console.log('Full URL:', `${baseUrl}/admin/users/${currentUserId}/waiver`);
+            
+            fetch(`${baseUrl}/admin/users/${currentUserId}/waiver`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -354,17 +385,24 @@
                 },
                 body: JSON.stringify(data)
             })
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                return response.json();
+            })
             .then(data => {
                 if (data.success) {
-                    location.reload();
+                    showAlert('Payment waiver granted successfully!', 'success');
+                    closeWaiverModal();
+                    setTimeout(() => location.reload(), 1000);
                 } else {
-                    alert(data.message || 'Error granting waiver');
+                    showAlert(data.message || 'Error granting waiver', 'error');
                 }
             })
             .catch(error => {
                 console.error('Error:', error);
-                alert('Error granting waiver');
+                showAlert('Error granting waiver: ' + error.message, 'error');
             });
         });
 

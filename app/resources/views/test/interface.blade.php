@@ -61,20 +61,35 @@
             navigator.permissions.query({ name: 'microphone' }).then(function(result) {
                 if (result.state === 'granted') {
                     updatePermissionStatus(true);
-                    // Try to get stream to test connection
+                    // Try to get stream and start monitoring
                     navigator.mediaDevices.getUserMedia({ audio: true })
                         .then(stream => {
-                            updateConnectionStatus(true);
-                            updateWorkingStatus(true);
                             currentStream = stream;
                             updateDeviceList();
+                            updateConnectionStatus(true);
+                            updateWorkingStatus(true);
+                            
+                            // Start audio level monitoring after stream is ready
+                            setTimeout(() => {
+                                console.log('Attempting to start audio monitoring on page load...');
+                                startAudioLevelMonitoring();
+                                
+                                // If the main monitoring fails, try simple monitoring
+                                setTimeout(() => {
+                                    if (!isMonitoring) {
+                                        console.log('Main monitoring failed on page load, trying simple monitoring...');
+                                        startSimpleAudioMonitoring();
+                                    }
+                                }, 1000);
+                            }, 500);
+                            
                             requestPermBtn.textContent = "✅ Permission Granted";
                             requestPermBtn.disabled = true;
                             startBtn.disabled = false;
                             progressText.textContent = "Microphone ready! Click 'Start Test' to begin.";
                         })
-                        .catch(err => {
-                            console.log('Microphone test failed:', err);
+                        .catch(error => {
+                            console.error('Error accessing microphone:', error);
                             updateConnectionStatus(false);
                             updateWorkingStatus(false);
                         });
@@ -152,6 +167,20 @@
                 box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
             }
         }
+        
+        /* Ensure level bar is always visible */
+        #level-bar {
+            min-width: 2px !important;
+            display: block !important;
+            opacity: 1 !important;
+            visibility: visible !important;
+        }
+        
+        /* Level bar container styling */
+        #level-bar-container {
+            position: relative;
+            overflow: visible;
+        }
     </style>
 </head>
 <body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen">
@@ -202,53 +231,82 @@
                 </div>
 
                 <!-- Microphone Status Panel -->
-                <div class="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-md">
-                    <h3 class="text-lg font-medium text-gray-900 mb-3">Microphone Status</h3>
+                <div class="mb-6 p-6 bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-lg shadow-sm">
+                    <h3 class="text-xl font-semibold text-gray-900 mb-4 flex items-center">
+                        <svg class="w-5 h-5 mr-2 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path>
+                        </svg>
+                        Microphone Status
+                    </h3>
                     
                     <!-- Status Indicators -->
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
                         <!-- Connection Status -->
-                        <div class="flex items-center space-x-2">
-                            <div id="connection-indicator" class="w-3 h-3 rounded-full bg-gray-400"></div>
-                            <span id="connection-text" class="text-sm text-gray-600">Not Connected</span>
+                        <div class="flex items-center space-x-3 p-3 bg-white rounded-lg border border-gray-200 shadow-sm">
+                            <div id="connection-indicator" class="w-4 h-4 rounded-full bg-gray-400 flex-shrink-0"></div>
+                            <div>
+                                <div id="connection-text" class="text-sm font-medium text-gray-700">Not Connected</div>
+                                <div class="text-xs text-gray-500">Device Status</div>
+                            </div>
                         </div>
                         
                         <!-- Permission Status -->
-                        <div class="flex items-center space-x-2">
-                            <div id="permission-indicator" class="w-3 h-3 rounded-full bg-gray-400"></div>
-                            <span id="permission-text" class="text-sm text-gray-600">No Permission</span>
+                        <div class="flex items-center space-x-3 p-3 bg-white rounded-lg border border-gray-200 shadow-sm">
+                            <div id="permission-indicator" class="w-4 h-4 rounded-full bg-gray-400 flex-shrink-0"></div>
+                            <div>
+                                <div id="permission-text" class="text-sm font-medium text-gray-700">No Permission</div>
+                                <div class="text-xs text-gray-500">Browser Access</div>
+                            </div>
                         </div>
                         
                         <!-- Working Status -->
-                        <div class="flex items-center space-x-2">
-                            <div id="working-indicator" class="w-3 h-3 rounded-full bg-gray-400"></div>
-                            <span id="working-text" class="text-sm text-gray-600">Not Tested</span>
+                        <div class="flex items-center space-x-3 p-3 bg-white rounded-lg border border-gray-200 shadow-sm">
+                            <div id="working-indicator" class="w-4 h-4 rounded-full bg-gray-400 flex-shrink-0"></div>
+                            <div>
+                                <div id="working-text" class="text-sm font-medium text-gray-700">Not Tested</div>
+                                <div class="text-xs text-gray-500">Audio Quality</div>
+                            </div>
                         </div>
                     </div>
                     
                     <!-- Audio Level Visualization -->
                     <div class="mb-4">
-                        <div class="flex items-center justify-between mb-2">
-                            <span class="text-sm font-medium text-gray-700">Microphone Level</span>
-                            <span id="level-value" class="text-sm text-gray-500">0%</span>
+                        <div class="flex items-center justify-between mb-3">
+                            <span class="text-sm font-semibold text-gray-800">Microphone Level</span>
+                            <span id="level-value" class="text-sm font-bold text-blue-600 bg-blue-100 px-2 py-1 rounded-full">0%</span>
                         </div>
-                        <div class="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-                            <div id="level-bar" class="h-full bg-gradient-to-r from-green-400 to-red-500 transition-all duration-100" style="width: 0%"></div>
+                        <div id="level-bar-container" class="w-full bg-gray-200 rounded-full h-6 overflow-hidden shadow-inner border-2 border-gray-300">
+                            <div id="level-bar" class="h-full bg-gradient-to-r from-green-400 via-yellow-400 to-red-500 transition-all duration-75 ease-out" style="width: 0%; min-width: 2px;"></div>
                         </div>
-                        <div class="flex justify-between text-xs text-gray-500 mt-1">
-                            <span>Silent</span>
-                            <span>Normal</span>
-                            <span>Loud</span>
+                        <div class="flex justify-between text-xs text-gray-600 mt-2 font-medium">
+                            <span class="flex items-center">
+                                <div class="w-2 h-2 bg-green-400 rounded-full mr-1"></div>
+                                Silent
+                            </span>
+                            <span class="flex items-center">
+                                <div class="w-2 h-2 bg-yellow-400 rounded-full mr-1"></div>
+                                Normal
+                            </span>
+                            <span class="flex items-center">
+                                <div class="w-2 h-2 bg-red-500 rounded-full mr-1"></div>
+                                Loud
+                            </span>
                         </div>
                     </div>
                     
                     <!-- Microphone Test Area -->
-                    <div id="mic-test-area" class="hidden">
-                        <div class="text-center">
+                    <div id="mic-test-area" class="mt-4">
+                        <div class="text-center space-y-3">
                             <button id="testMicBtn" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
                                 Test Microphone
                             </button>
-                            <p class="text-sm text-gray-600 mt-2">Speak into your microphone to see the level indicator</p>
+                            <button id="debugMicBtn" class="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500">
+                                Debug Audio Info
+                            </button>
+                            <button id="testLevelBtn" class="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500">
+                                Test Level Bar
+                            </button>
+                            <p class="text-sm text-gray-600">Click "Test Microphone" to test your microphone - speak and watch the level indicator above</p>
                         </div>
                     </div>
                 </div>
@@ -386,35 +444,213 @@
         const workingIndicator = document.getElementById('working-indicator');
         const workingText = document.getElementById('working-text');
         
+        // Audio level monitoring variables
+        let audioContext = null;
+        let analyser = null;
+        let microphone = null;
+        let dataArray = null;
+        let isMonitoring = false;
+        
         // Update microphone status functions
         function updateConnectionStatus(connected) {
             if (connected) {
-                connectionIndicator.className = 'w-3 h-3 rounded-full bg-green-500';
+                connectionIndicator.className = 'w-4 h-4 rounded-full bg-green-500 shadow-lg animate-pulse';
                 connectionText.textContent = 'Connected';
+                connectionText.className = 'text-sm font-medium text-green-700';
             } else {
-                connectionIndicator.className = 'w-3 h-3 rounded-full bg-red-500';
+                connectionIndicator.className = 'w-4 h-4 rounded-full bg-red-500';
                 connectionText.textContent = 'Not Connected';
+                connectionText.className = 'text-sm font-medium text-red-700';
             }
         }
         
         function updatePermissionStatus(granted) {
             if (granted) {
-                permissionIndicator.className = 'w-3 h-3 rounded-full bg-green-500';
+                permissionIndicator.className = 'w-4 h-4 rounded-full bg-green-500 shadow-lg animate-pulse';
                 permissionText.textContent = 'Permission Granted';
+                permissionText.className = 'text-sm font-medium text-green-700';
             } else {
-                permissionIndicator.className = 'w-3 h-3 rounded-full bg-red-500';
+                permissionIndicator.className = 'w-4 h-4 rounded-full bg-red-500';
                 permissionText.textContent = 'No Permission';
+                permissionText.className = 'text-sm font-medium text-red-700';
             }
         }
         
         function updateWorkingStatus(working) {
             if (working) {
-                workingIndicator.className = 'w-3 h-3 rounded-full bg-green-500';
+                workingIndicator.className = 'w-4 h-4 rounded-full bg-green-500 shadow-lg animate-pulse';
                 workingText.textContent = 'Working';
+                workingText.className = 'text-sm font-medium text-green-700';
             } else {
-                workingIndicator.className = 'w-3 h-3 rounded-full bg-yellow-500';
+                workingIndicator.className = 'w-4 h-4 rounded-full bg-gray-400';
                 workingText.textContent = 'Not Tested';
+                workingText.className = 'text-sm font-medium text-gray-700';
             }
+        }
+        
+        // Audio level monitoring functions
+        function startAudioLevelMonitoring() {
+            if (isMonitoring) {
+                console.log('Audio monitoring already active');
+                return;
+            }
+            
+            if (!currentStream) {
+                console.error('No current stream available for monitoring');
+                return;
+            }
+            
+            try {
+                console.log('Starting audio level monitoring...');
+                console.log('Current stream:', currentStream);
+                console.log('Stream active:', currentStream.active);
+                console.log('Stream tracks:', currentStream.getTracks().length);
+                
+                // Create new audio context
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                console.log('Audio context created:', audioContext.state);
+                
+                // Wait for audio context to be ready
+                if (audioContext.state === 'suspended') {
+                    audioContext.resume().then(() => {
+                        console.log('Audio context resumed:', audioContext.state);
+                        setupAnalyser();
+                    });
+                } else {
+                    setupAnalyser();
+                }
+                
+            } catch (error) {
+                console.error('Error initializing audio context:', error);
+                updateConnectionStatus(false);
+            }
+        }
+        
+        function setupAnalyser() {
+            try {
+                analyser = audioContext.createAnalyser();
+                analyser.fftSize = 512; // Increased for better sensitivity
+                analyser.smoothingTimeConstant = 0.3; // Less smoothing for more responsiveness
+                
+                microphone = audioContext.createMediaStreamSource(currentStream);
+                microphone.connect(analyser);
+                
+                dataArray = new Uint8Array(analyser.frequencyBinCount);
+                isMonitoring = true;
+                
+                updateConnectionStatus(true);
+                updatePermissionStatus(true);
+                updateWorkingStatus(true);
+                
+                console.log('Audio level monitoring started successfully');
+                console.log('Audio context state:', audioContext.state);
+                console.log('Analyser frequency bin count:', analyser.frequencyBinCount);
+                console.log('Data array length:', dataArray.length);
+                
+                monitorAudioLevel();
+            } catch (error) {
+                console.error('Error setting up analyser:', error);
+                updateConnectionStatus(false);
+            }
+        }
+        
+        function stopAudioLevelMonitoring() {
+            isMonitoring = false;
+            if (microphone) {
+                microphone.disconnect();
+                microphone = null;
+            }
+            if (audioContext) {
+                audioContext.close();
+                audioContext = null;
+            }
+            updateConnectionStatus(false);
+            updatePermissionStatus(false);
+            updateWorkingStatus(false);
+            updateAudioLevel(0);
+        }
+        
+        function monitorAudioLevel() {
+            if (!isMonitoring || !analyser) {
+                console.log('Monitoring stopped - isMonitoring:', isMonitoring, 'analyser:', !!analyser);
+                return;
+            }
+            
+            try {
+                analyser.getByteFrequencyData(dataArray);
+                
+                // Calculate RMS (Root Mean Square) for more accurate volume detection
+                let sum = 0;
+                for (let i = 0; i < dataArray.length; i++) {
+                    sum += dataArray[i] * dataArray[i];
+                }
+                const rms = Math.sqrt(sum / dataArray.length);
+                
+                // More sensitive scaling - multiply by 4 to make it much more responsive
+                const percentage = Math.min(100, (rms / 64) * 100 * 4);
+                
+                // Apply minimal smoothing to prevent jittery display
+                const smoothedPercentage = Math.max(0, percentage * 0.6 + (window.lastAudioLevel || 0) * 0.4);
+                window.lastAudioLevel = smoothedPercentage;
+                
+                // Debug logging every 60 frames (about once per second)
+                if (!window.frameCount) window.frameCount = 0;
+                window.frameCount++;
+                if (window.frameCount % 60 === 0) {
+                    console.log('Audio level - Raw:', percentage.toFixed(2), 'Smoothed:', smoothedPercentage.toFixed(2), 'RMS:', rms.toFixed(2));
+                }
+                
+                updateAudioLevel(smoothedPercentage);
+                
+                requestAnimationFrame(monitorAudioLevel);
+            } catch (error) {
+                console.error('Error in monitorAudioLevel:', error);
+                isMonitoring = false;
+            }
+        }
+        
+        function updateAudioLevel(percentage) {
+            const levelValue = document.getElementById('level-value');
+            const levelBar = document.getElementById('level-bar');
+            
+            if (!levelValue || !levelBar) {
+                console.error('Level elements not found!');
+                return;
+            }
+            
+            // Ensure minimum visibility
+            const displayPercentage = Math.max(2, percentage); // Minimum 2% for visibility
+            
+            levelValue.textContent = Math.round(percentage) + '%';
+            levelBar.style.width = displayPercentage + '%';
+            
+            console.log('Updating audio level:', percentage.toFixed(2), 'Display:', displayPercentage.toFixed(2));
+            
+            // Update color based on level with better thresholds
+            if (percentage < 5) {
+                levelBar.className = 'h-full bg-gradient-to-r from-gray-300 to-gray-400 transition-all duration-75 ease-out';
+                levelBar.style.backgroundColor = '#9CA3AF'; // Fallback solid color
+            } else if (percentage < 25) {
+                levelBar.className = 'h-full bg-gradient-to-r from-green-400 to-green-500 transition-all duration-75 ease-out';
+                levelBar.style.backgroundColor = '#10B981'; // Fallback solid color
+            } else if (percentage < 60) {
+                levelBar.className = 'h-full bg-gradient-to-r from-yellow-400 to-yellow-500 transition-all duration-75 ease-out';
+                levelBar.style.backgroundColor = '#F59E0B'; // Fallback solid color
+            } else {
+                levelBar.className = 'h-full bg-gradient-to-r from-red-400 to-red-500 transition-all duration-75 ease-out';
+                levelBar.style.backgroundColor = '#EF4444'; // Fallback solid color
+            }
+            
+            // Add visual feedback for very low levels (microphone not working)
+            if (percentage < 1) {
+                levelValue.className = 'text-sm font-bold text-gray-400 bg-gray-100 px-2 py-1 rounded-full';
+            } else {
+                levelValue.className = 'text-sm font-bold text-blue-600 bg-blue-100 px-2 py-1 rounded-full';
+            }
+            
+            // Force visibility
+            levelBar.style.display = 'block';
+            levelBar.style.opacity = '1';
         }
         
         let recordRTC = null;
@@ -474,6 +710,20 @@
                 updatePermissionStatus(true);
                 updateConnectionStatus(true);
                 updateWorkingStatus(true);
+                
+                // Start audio level monitoring after a short delay to ensure stream is ready
+                setTimeout(() => {
+                    console.log('Attempting to start audio monitoring after permission granted...');
+                    startAudioLevelMonitoring();
+                    
+                    // If the main monitoring fails, try simple monitoring
+                    setTimeout(() => {
+                        if (!isMonitoring) {
+                            console.log('Main monitoring failed, trying simple monitoring...');
+                            startSimpleAudioMonitoring();
+                        }
+                    }, 1000);
+                }, 500);
                 
                 requestPermBtn.textContent = "✅ Permission Granted";
                 requestPermBtn.disabled = true;
@@ -781,12 +1031,151 @@
             progressText.textContent = 'Test completed';
         }
 
+        // Alternative simple audio level monitoring
+        function startSimpleAudioMonitoring() {
+            if (!currentStream) {
+                console.error('No stream available for simple monitoring');
+                return;
+            }
+            
+            console.log('Starting simple audio monitoring...');
+            
+            // Stop any existing monitoring first
+            if (window.simpleMonitoring) {
+                window.simpleMonitoring.stop();
+            }
+            
+            // Create a simple audio element to monitor levels
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const analyser = audioContext.createAnalyser();
+            const microphone = audioContext.createMediaStreamSource(currentStream);
+            
+            microphone.connect(analyser);
+            analyser.fftSize = 512; // Increased for better sensitivity
+            analyser.smoothingTimeConstant = 0.3; // Less smoothing for more responsiveness
+            
+            const dataArray = new Uint8Array(analyser.frequencyBinCount);
+            let isMonitoring = true;
+            
+            function monitor() {
+                if (!isMonitoring) return;
+                
+                analyser.getByteFrequencyData(dataArray);
+                
+                // Calculate RMS for better sensitivity
+                let sum = 0;
+                for (let i = 0; i < dataArray.length; i++) {
+                    sum += dataArray[i] * dataArray[i];
+                }
+                const rms = Math.sqrt(sum / dataArray.length);
+                
+                // More sensitive scaling - multiply by 3 to make it more responsive
+                const percentage = Math.min(100, (rms / 85) * 100 * 3);
+                
+                // Apply minimal smoothing
+                const smoothedPercentage = Math.max(0, percentage * 0.8 + (window.lastSimpleLevel || 0) * 0.2);
+                window.lastSimpleLevel = smoothedPercentage;
+                
+                console.log('Simple monitoring - Raw RMS:', rms.toFixed(2), 'Percentage:', percentage.toFixed(2), 'Smoothed:', smoothedPercentage.toFixed(2));
+                updateAudioLevel(smoothedPercentage);
+                
+                requestAnimationFrame(monitor);
+            }
+            
+            monitor();
+            
+            // Store reference for cleanup
+            window.simpleMonitoring = {
+                stop: () => {
+                    isMonitoring = false;
+                    microphone.disconnect();
+                    audioContext.close();
+                }
+            };
+        }
+
+        // Test function to manually set level bar for visual testing
+        function testLevelBar() {
+            console.log('Testing level bar visibility...');
+            
+            // Test different levels
+            const testLevels = [0, 10, 25, 50, 75, 100];
+            let currentTest = 0;
+            
+            function runTest() {
+                if (currentTest < testLevels.length) {
+                    const level = testLevels[currentTest];
+                    console.log('Testing level:', level);
+                    updateAudioLevel(level);
+                    currentTest++;
+                    setTimeout(runTest, 1000);
+                } else {
+                    console.log('Level bar test completed');
+                    updateAudioLevel(0);
+                }
+            }
+            
+            runTest();
+        }
+
+        // Debug function to show raw audio data
+        function debugAudioData() {
+            if (!currentStream) {
+                console.log('No stream available for debugging');
+                return;
+            }
+            
+            console.log('=== AUDIO DEBUG INFO ===');
+            console.log('Stream active:', currentStream.active);
+            console.log('Stream tracks:', currentStream.getTracks().length);
+            console.log('Track enabled:', currentStream.getTracks()[0]?.enabled);
+            console.log('Track muted:', currentStream.getTracks()[0]?.muted);
+            console.log('Track readyState:', currentStream.getTracks()[0]?.readyState);
+            console.log('Track settings:', currentStream.getTracks()[0]?.getSettings());
+            console.log('========================');
+        }
+
+        // Test microphone function
+        function testMicrophone() {
+            console.log('Test microphone button clicked');
+            console.log('Current stream:', !!currentStream);
+            console.log('Is monitoring:', isMonitoring);
+            
+            if (!currentStream) {
+                alert('Please request microphone permission first!');
+                return;
+            }
+            
+            // Force stop all existing monitoring
+            if (window.simpleMonitoring) {
+                window.simpleMonitoring.stop();
+            }
+            stopAudioLevelMonitoring();
+            
+            // Show debug info first
+            debugAudioData();
+            
+            // Force start simple monitoring immediately
+            console.log('Force starting simple audio monitoring...');
+            setTimeout(() => {
+                startSimpleAudioMonitoring();
+                
+                // Give it a moment to start, then show feedback
+                setTimeout(() => {
+                    alert('Microphone test started! Speak loudly into your microphone and watch the level indicator above. The level should jump significantly when you speak. Check the browser console (F12) for detailed debugging information.');
+                }, 500);
+            }, 100);
+        }
+
         // Event Listeners
         requestPermBtn.addEventListener('click', requestMicrophonePermission);
         startBtn.addEventListener('click', startRecording);
         stopBtn.addEventListener('click', stopRecording);
         speakBtn.addEventListener('click', playParagraph);
         stopSpeakBtn.addEventListener('click', stopPlaying);
+        document.getElementById('testMicBtn').addEventListener('click', testMicrophone);
+        document.getElementById('debugMicBtn').addEventListener('click', debugAudioData);
+        document.getElementById('testLevelBtn').addEventListener('click', testLevelBar);
         
         resetMicBtn.addEventListener('click', () => {
             if (currentStream) {
@@ -803,6 +1192,9 @@
             requestPermBtn.disabled = false;
             requestPermBtn.textContent = "Request Microphone Permission";
             progressText.textContent = "Microphone reset. Click 'Request Microphone Permission' to begin.";
+            
+            // Stop audio level monitoring
+            stopAudioLevelMonitoring();
             
             // Reset status indicators
             updatePermissionStatus(false);

@@ -288,6 +288,11 @@
         let currentPlanId = null;
         let isEditMode = false;
 
+        // Reusable function to get base URL for admin requests
+        function getAdminBaseUrl() {
+            return window.location.origin + window.location.pathname.replace('/admin/pricing', '');
+        }
+
         function openCreateModal() {
             isEditMode = false;
             currentPlanId = null;
@@ -334,14 +339,23 @@
         }
 
         function confirmDelete() {
-            fetch(`/admin/pricing/${currentPlanId}`, {
+            const baseUrl = getAdminBaseUrl();
+            console.log('Deleting pricing plan:', currentPlanId);
+            console.log('Full URL:', `${baseUrl}/admin/pricing/${currentPlanId}`);
+            
+            fetch(`${baseUrl}/admin/pricing/${currentPlanId}`, {
                 method: 'DELETE',
                 headers: {
                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
                     'Content-Type': 'application/json'
                 }
             })
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                return response.json();
+            })
             .then(data => {
                 if (data.success) {
                     showAlert('Plan deleted successfully!', 'success');
@@ -352,7 +366,7 @@
             })
             .catch(error => {
                 console.error('Error:', error);
-                showAlert('Error deleting plan', 'error');
+                showAlert('Error deleting plan: ' + error.message, 'error');
             })
             .finally(() => {
                 closeConfirmModal();
@@ -414,8 +428,13 @@
                 features: features
             };
 
-            const url = isEditMode ? `/admin/pricing/${currentPlanId}` : '/admin/pricing';
+            const baseUrl = getAdminBaseUrl();
+            const url = isEditMode ? `${baseUrl}/admin/pricing/${currentPlanId}` : `${baseUrl}/admin/pricing`;
             const method = isEditMode ? 'PATCH' : 'POST';
+            
+            console.log('Submitting pricing plan:', isEditMode ? 'Edit' : 'Create');
+            console.log('Full URL:', url);
+            console.log('Method:', method);
 
             fetch(url, {
                 method: method,
@@ -425,10 +444,16 @@
                 },
                 body: JSON.stringify(data)
             })
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                return response.json();
+            })
             .then(data => {
                 if (data.success) {
                     showAlert(data.message || 'Plan saved successfully!', 'success');
+                    closeModal();
                     setTimeout(() => location.reload(), 1500);
                 } else {
                     showAlert(data.message || 'Error saving plan', 'error');
@@ -436,7 +461,7 @@
             })
             .catch(error => {
                 console.error('Error:', error);
-                showAlert('Error saving plan', 'error');
+                showAlert('Error saving plan: ' + error.message, 'error');
             });
         });
 
