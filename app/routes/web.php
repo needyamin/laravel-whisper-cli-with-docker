@@ -1,6 +1,8 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Http\Request;
 use App\Http\Controllers\SpeechController;
 use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\SpeakingTestController;
@@ -37,9 +39,9 @@ Route::middleware('auth')->group(function () {
     
     // Test routes (with payment check)
     Route::get('/test', [SpeakingTestController::class, 'showTest'])->name('test.show')->middleware('check.payment');
-    Route::post('/test/start', [SpeakingTestController::class, 'startTest'])->name('test.start');
-    Route::post('/test/submit', [SpeakingTestController::class, 'submitTest'])->name('test.submit');
-    Route::get('/test/results/{testId}', [SpeakingTestController::class, 'getResults'])->name('test.results');
+    Route::post('/test/start', [SpeakingTestController::class, 'startTest'])->name('test.start')->middleware('check.payment');
+    Route::post('/test/submit', [SpeakingTestController::class, 'submitTest'])->name('test.submit')->middleware('check.payment');
+    Route::get('/test/results/{testId}', [SpeakingTestController::class, 'getResults'])->name('test.results')->middleware('check.payment');
     
     // Test history and certificates
     Route::get('/test-history', [DashboardController::class, 'testHistory'])->name('test.history');
@@ -84,6 +86,52 @@ Route::get('/debug/test-submit', function() {
         'csrf_token' => csrf_token()
     ]);
 })->middleware('auth');
+
+// Simple debug route (no auth required)
+Route::post('/debug/simple', function(Request $request) {
+    return response()->json([
+        'message' => 'Simple debug route working',
+        'method' => $request->method(),
+        'test_id' => $request->test_id ?? 'not provided',
+        'timestamp' => now()->toISOString()
+    ]);
+});
+
+// Debug route for test start
+Route::post('/debug/test-start', function(Request $request) {
+    try {
+        $user = Auth::user();
+        
+        if (!$user) {
+            return response()->json([
+                'error' => 'Not authenticated',
+                'message' => 'User not logged in'
+            ], 401);
+        }
+        
+        return response()->json([
+            'message' => 'Debug test start route working',
+            'user' => $user->name,
+            'user_id' => $user->id,
+            'can_take_test' => $user->canTakeTest(),
+            'has_waiver' => $user->hasActiveWaiver(),
+            'free_tests_used' => $user->free_tests_used,
+            'test_id' => $request->test_id ?? 'not provided',
+            'csrf_token' => csrf_token()
+        ]);
+    } catch (\Exception $e) {
+        return response()->json([
+            'error' => 'Debug route error',
+            'message' => $e->getMessage(),
+            'file' => $e->getFile(),
+            'line' => $e->getLine()
+        ], 500);
+    }
+})->middleware('auth');
+
+
+
+
 
 // Test route for certificates view
 Route::get('/test-certificates', function() {

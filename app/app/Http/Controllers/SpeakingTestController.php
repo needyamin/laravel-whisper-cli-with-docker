@@ -76,19 +76,38 @@ class SpeakingTestController extends Controller
     public function startTest(Request $request)
     {
         try {
+            $user = Auth::user();
+            
+            // Check if user can take test (payment check)
+            if (!$user->canTakeTest()) {
+                if ($request->ajax() || $request->wantsJson()) {
+                    return response()->json([
+                        'success' => false,
+                        'error' => 'Payment required',
+                        'message' => 'You need to purchase a test plan to continue. Your first test is free!',
+                        'redirect' => route('payment.index')
+                    ], 402);
+                }
+                return redirect()->route('payment.index')
+                    ->with('error', 'You need to purchase a test plan to continue. Your first test is free!');
+            }
+            
             $request->validate([
                 'test_id' => 'required|exists:speaking_tests,id'
             ]);
 
             $test = SpeakingTest::where('id', $request->test_id)
                 ->where('user_id', Auth::id())
-                ->where('status', 'pending')
+                ->whereIn('status', ['pending', 'in_progress'])
                 ->firstOrFail();
 
-            $test->update([
-                'status' => 'in_progress',
-                'started_at' => now()
-            ]);
+            // Only update status if it's pending
+            if ($test->status === 'pending') {
+                $test->update([
+                    'status' => 'in_progress',
+                    'started_at' => now()
+                ]);
+            }
 
             return response()->json([
                 'success' => true,
@@ -98,7 +117,7 @@ class SpeakingTestController extends Controller
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
                 'success' => false,
-                'error' => 'Validation failed: ' . implode(', ', array_flatten($e->errors()))
+                'error' => 'Validation failed: ' . implode(', ', collect($e->errors())->flatten()->toArray())
             ], 422);
         } catch (\Exception $e) {
             \Log::error('Start test error', [
@@ -121,7 +140,7 @@ class SpeakingTestController extends Controller
         try {
             $request->validate([
                 'test_id' => 'required|exists:speaking_tests,id',
-                'audio_file' => 'required|file|mimes:webm,mp3,wav|max:10240', // 10MB max
+                'audio_file' => 'required|file|mimes:webm,mp3,wav,ogg|max:10240', // 10MB max
             ]);
 
             $user = Auth::user();
@@ -164,15 +183,90 @@ class SpeakingTestController extends Controller
 
             $audioFile = $request->file('audio_file');
             $filename = Str::uuid()->toString();
-            $audioPath = "test_audio/{$filename}.webm";
+            
+            // Debug: Log file details
+            \Log::info('Audio file details', [
+                'test_id' => $test->id,
+                'original_name' => $audioFile->getClientOriginalName(),
+                'extension' => $audioFile->getClientOriginalExtension(),
+                'mime_type' => $audioFile->getMimeType(),
+                'size' => $audioFile->getSize(),
+                'real_path' => $audioFile->getRealPath(),
+                'is_valid' => $audioFile->isValid(),
+                'error' => $audioFile->getError()
+            ]);
+            
+            // Get the actual file extension from the uploaded file
+            $extension = $audioFile->getClientOriginalExtension();
+            if (empty($extension)) {
+                // Fallback: determine extension from MIME type
+                $mimeType = $audioFile->getMimeType();
+                $extension = match($mimeType) {
+                    'audio/webm' => 'webm',
+                    'audio/ogg' => 'ogg',
+                    'audio/mp3' => 'mp3',
+                    'audio/wav' => 'wav',
+                    default => 'webm'
+                };
+            }
+            
+            $audioPath = "test_audio/{$filename}.{$extension}";
+            
+            \Log::info('Generated audio path', [
+                'test_id' => $test->id,
+                'filename' => $filename,
+                'extension' => $extension,
+                'audio_path' => $audioPath,
+                'path_length' => strlen($audioPath)
+            ]);
             
             // Store audio file
-            Storage::disk('public')->put($audioPath, file_get_contents($audioFile->getRealPath()));
+            try {
+                \Log::info('Storing audio file', [
+                    'test_id' => $test->id,
+                    'filename' => $filename,
+                    'extension' => $extension,
+                    'audio_path' => $audioPath,
+                    'file_size' => $audioFile->getSize(),
+                    'mime_type' => $audioFile->getMimeType()
+                ]);
+                
+                // Check if file content is readable
+                $fileContent = $audioFile->getContent();
+                if ($fileContent === false) {
+                    throw new \Exception('Failed to read file content');
+                }
+                
+                if (empty($fileContent)) {
+                    throw new \Exception('File content is empty');
+                }
+                
+                \Log::info('File content read successfully', [
+                    'test_id' => $test->id,
+                    'content_size' => strlen($fileContent),
+                    'audio_path' => $audioPath
+                ]);
+                
+                Storage::disk('public')->put($audioPath, $fileContent);
+                
+                \Log::info('Audio file stored successfully', ['audio_path' => $audioPath]);
+            } catch (\Exception $e) {
+                \Log::error('Failed to store audio file', [
+                    'test_id' => $test->id,
+                    'error' => $e->getMessage(),
+                    'audio_path' => $audioPath
+                ]);
+                
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Failed to store audio file: ' . $e->getMessage()
+                ], 500);
+            }
 
             // Send to Whisper API for transcription
             $response = Http::attach(
                 'file',
-                fopen($audioFile->getRealPath(), 'r'),
+                $fileContent,
                 $audioFile->getClientOriginalName()
             )->post('https://whisper.md-yamin-hossain.workers.dev');
 
@@ -235,7 +329,7 @@ class SpeakingTestController extends Controller
             ]);
             return response()->json([
                 'success' => false,
-                'error' => 'Validation failed: ' . implode(', ', array_flatten($e->errors()))
+                'error' => 'Validation failed: ' . implode(', ', collect($e->errors())->flatten()->toArray())
             ], 422);
         } catch (\Exception $e) {
             \Log::error('Test submission error', [
